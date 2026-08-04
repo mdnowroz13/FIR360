@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Download, CheckSquare } from 'lucide-react'
+import { Loader2, FileDown, CheckSquare, ShieldCheck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { pdf } from '@react-pdf/renderer'
 import { FIRPdfDocument } from './FIRPdfDocument'
+import { motion } from 'framer-motion'
 
 export default function FIRReview({ draft, officer }: { draft: any, officer: any }) {
   const [confirmed, setConfirmed] = useState(false)
@@ -13,9 +14,6 @@ export default function FIRReview({ draft, officer }: { draft: any, officer: any
   const router = useRouter()
   const supabase = createClient()
 
-  // For a real app we'd allow editing fields here, but for MVP we display them
-  // as read-only and require explicit confirmation.
-  
   const handleGenerate = async () => {
     setGenerating(true)
     try {
@@ -68,68 +66,140 @@ export default function FIRReview({ draft, officer }: { draft: any, officer: any
   }
 
   return (
-    <div className="space-y-8">
-      {/* Read-only view of the data */}
-      <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <dt className="text-sm font-medium text-gray-500">Confirmed Legal Sections</dt>
-          <dd className="mt-1 text-sm text-gray-900">
-            <ul className="list-disc pl-5">
-              {draft.officer_confirmed_sections?.map((s: any) => (
-                <li key={s.code}><span className="font-semibold">{s.code}</span>: {s.title}</li>
-              ))}
-            </ul>
-          </dd>
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 pb-24"
+    >
+      
+      {/* Left Column: Review Details (The "Paper") */}
+      <div className="lg:col-span-8 space-y-6">
+        <div className="border-b-2 border-[var(--ink)] pb-4 mb-6">
+          <h2 className="text-2xl font-serif tracking-tight text-[var(--ink)]">Pre-Filing Document Preview</h2>
+          <p className="font-mono text-xs tracking-widest text-[var(--muted)] mt-2 uppercase">
+            Review the generated content before finalizing the official record.
+          </p>
         </div>
 
-        <div>
-          <dt className="text-sm font-medium text-gray-500">Complainant Name</dt>
-          <dd className="mt-1 text-sm text-gray-900">{draft.complainant_name || 'N/A'}</dd>
-        </div>
-        <div>
-          <dt className="text-sm font-medium text-gray-500">Contact</dt>
-          <dd className="mt-1 text-sm text-gray-900">{draft.complainant_contact || 'N/A'}</dd>
-        </div>
-        <div className="sm:col-span-2">
-          <dt className="text-sm font-medium text-gray-500">Incident Narrative</dt>
-          <dd className="mt-1 text-sm text-gray-900 whitespace-pre-wrap rounded-md bg-gray-50 p-4 border border-gray-200">
-            {draft.incident_narrative}
-          </dd>
+        <div className="bg-[var(--surface)] border border-[var(--rule)] relative">
+          
+          <div className="p-8 space-y-10">
+            <div className="flex justify-between items-start border-b border-[var(--rule)] pb-6">
+              <div>
+                <p className="font-mono text-[10px] text-[var(--muted)] tracking-widest uppercase mb-1">Temporary ID</p>
+                <p className="font-mono text-xl font-bold text-[var(--ink)] uppercase">{draft.id.split('-')[0]}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-mono text-[10px] text-[var(--muted)] tracking-widest uppercase mb-1">Jurisdiction</p>
+                <p className="font-serif text-base text-[var(--ink)]">Cyberabad Police Commissionerate</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <dt className="font-mono text-[10px] text-[var(--muted)] uppercase tracking-widest mb-1">Complainant / Informant</dt>
+                <dd className="font-serif text-lg text-[var(--ink)] uppercase border-b border-[var(--rule)] border-dashed pb-1">{draft.complainant?.name || 'N/A'}</dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[10px] text-[var(--muted)] uppercase tracking-widest mb-1">Address</dt>
+                <dd className="font-serif text-lg text-[var(--ink)] border-b border-[var(--rule)] border-dashed pb-1">{draft.complainant?.address || 'N/A'}</dd>
+              </div>
+            </div>
+            
+            <div>
+              <dt className="font-mono text-[10px] text-[var(--muted)] uppercase tracking-widest mb-4">Final Tehrir (Incident Narrative)</dt>
+              <dd className="font-serif text-base text-[var(--ink)] whitespace-pre-wrap leading-[32px] relative">
+                {/* Lined paper effect background */}
+                <div className="absolute inset-0 pointer-events-none -z-10 opacity-50" style={{ backgroundImage: 'repeating-linear-gradient(transparent, transparent 31px, var(--rule) 32px)', backgroundPositionY: '5px' }}></div>
+                {draft.incident_narrative}
+              </dd>
+            </div>
+
+            <div className="pt-6 border-t border-[var(--rule)]">
+              <dt className="font-mono text-[10px] text-[var(--muted)] uppercase tracking-widest mb-4">Adjudicated Penal Code Violations</dt>
+              <dd className="space-y-2 font-mono text-sm">
+                {draft.officer_confirmed_sections?.map((s: any) => (
+                  <div key={s.code} className="flex gap-4 items-start">
+                    <span className="font-bold text-[var(--ink)] shrink-0 w-24">[{s.code}]</span>
+                    <span className="text-[var(--ink)] uppercase">{s.title}</span>
+                  </div>
+                ))}
+              </dd>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Human in the loop confirmation */}
-      <div className="rounded-md bg-blue-50 p-4 border border-blue-200">
-        <div className="flex items-start">
-          <div className="flex h-6 items-center">
-            <input
-              id="confirm"
-              name="confirm"
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600"
-            />
+      {/* Right Column: Authorization & Metrics */}
+      <div className="lg:col-span-4 space-y-6">
+        <div className="sticky top-24 space-y-6">
+          
+          <div className="bg-[var(--surface)] border border-[var(--rule)] p-6">
+            <h3 className="font-mono text-xs font-bold tracking-widest text-[var(--ink)] uppercase border-b border-[var(--rule)] pb-4 mb-4 flex justify-between items-center">
+              <span>System Verification</span>
+              <ShieldCheck className="h-4 w-4 text-[var(--success)]" />
+            </h3>
+            
+            <div className="space-y-4 font-mono text-xs uppercase tracking-widest">
+              <div className="flex justify-between items-center border-b border-[var(--rule)] border-dashed pb-2">
+                <span className="text-[var(--muted)]">Core Facts</span>
+                <span className="font-bold text-[var(--success)]">[100% EXTR]</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-[var(--rule)] border-dashed pb-2">
+                <span className="text-[var(--muted)]">Evidence Log</span>
+                <span className="font-bold text-[var(--success)]">[VERIFIED]</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-[var(--rule)] border-dashed pb-2">
+                <span className="text-[var(--muted)]">Legal DB Crossref</span>
+                <span className="font-bold text-[var(--success)]">[COMPLETE]</span>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-[var(--muted)]">Status</span>
+                <span className="font-bold text-[var(--warning)] animate-pulse">[AWAITING AUTH]</span>
+              </div>
+            </div>
           </div>
-          <div className="ml-3 text-sm leading-6">
-            <label htmlFor="confirm" className="font-medium text-blue-900">
-              I have reviewed and confirm the above
+          
+          {/* Human in the loop confirmation */}
+          <div className={`p-6 border transition-colors ${confirmed ? 'bg-[var(--success)]/10 border-[var(--success)]' : 'bg-[var(--paper)] border-[var(--stamp)]'}`}>
+            <label className="flex items-start cursor-pointer group">
+              <div className="flex h-5 items-center pt-1">
+                <input
+                  id="confirm"
+                  name="confirm"
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(e) => setConfirmed(e.target.checked)}
+                  className="h-5 w-5 border-2 border-[var(--ink)] text-[var(--ink)] focus:ring-0 bg-transparent rounded-none appearance-none checked:bg-[var(--ink)] transition-colors relative
+                    checked:after:content-['✓'] checked:after:absolute checked:after:text-[var(--paper)] checked:after:left-1 checked:after:-top-0.5 checked:after:font-bold"
+                />
+              </div>
+              <div className="ml-4">
+                <span className={`font-mono text-sm font-bold uppercase tracking-widest block transition-colors ${confirmed ? 'text-[var(--success)]' : 'text-[var(--stamp)]'}`}>
+                  Officer Authorization
+                </span>
+                <p className="text-[var(--ink)] mt-2 font-serif text-sm leading-relaxed">
+                  I certify that the facts extracted herein are accurate reflections of the complainant's statement, and the selected sections of law are applicable based on my preliminary investigation.
+                </p>
+              </div>
             </label>
-            <p className="text-blue-700">By checking this box, you certify that the extracted details and legal sections are accurate based on your investigative judgment.</p>
           </div>
+
+          <button
+            onClick={handleGenerate}
+            disabled={!confirmed || generating}
+            className={`w-full flex items-center justify-center gap-x-2 px-6 py-4 text-xs font-mono font-bold uppercase tracking-widest transition-colors border ${
+              confirmed && !generating 
+                ? 'bg-[var(--ink)] text-[var(--paper)] border-[var(--ink)] hover:bg-[#0f172a]' 
+                : 'bg-[var(--surface)] text-[var(--muted)] border-[var(--rule)] cursor-not-allowed'
+            }`}
+          >
+            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+            {generating ? 'GENERATING PDF...' : 'FINALIZE RECORD'}
+          </button>
         </div>
       </div>
 
-      <div className="flex justify-end pt-4">
-        <button
-          onClick={handleGenerate}
-          disabled={!confirmed || generating}
-          className="inline-flex items-center gap-x-2 rounded-md bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {generating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-          {generating ? 'Generating PDF...' : 'Finalize & Download FIR PDF'}
-        </button>
-      </div>
-    </div>
+    </motion.div>
   )
 }

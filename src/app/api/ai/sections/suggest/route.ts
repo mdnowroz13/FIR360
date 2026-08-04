@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
-import { BNS_REFERENCE } from '@/data/bns_reference'
+import { retrieveRelevantLegalReferences } from '@/lib/retriever'
+import OpenAI from 'openai'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '')
+const openai = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY || ''
+})
 
 export async function POST(request: Request) {
   try {
@@ -24,53 +27,101 @@ export async function POST(request: Request) {
     }
 
     if (draft.ai_suggested_sections && draft.ai_suggested_sections.length > 0) {
-      return NextResponse.json({ success: true, sections: draft.ai_suggested_sections })
+      return NextResponse.json({ success: true, sections: draft.ai_suggested_sections, incident_analysis: draft.incident_analysis || [] })
     }
 
-    const prompt = `Given the finalized incident narrative and details:
-${JSON.stringify({
-  narrative: draft.incident_narrative,
-  type: draft.incident_type,
-  additional_details: draft.additional_details
-})}
+    const facts = {
+      complainant: draft.complainant || {},
+      accused: draft.accused || [],
+      witnesses: draft.witnesses || [],
+      evidence: draft.evidence || [],
+      timeline: draft.timeline || [],
+      property: draft.property || [],
+      incident_categories: draft.incident_categories || [],
+      raw_transcript: draft.raw_transcript
+    }
 
-And this reference context of legal section summaries:
-${JSON.stringify(BNS_REFERENCE, null, 2)}
+    const topLegalReferences = retrieveRelevantLegalReferences(facts)
 
-Suggest applicable section(s) for this FIR.
-For EACH suggestion output:
-{ "code": "string", "title": "string", "reason": "string (plain language, tied specifically to details in this narrative — not generic)", "confidence": "high|medium|low" }
+    const prompt = `You are an expert Unified Narrative and Legal Agent for the Indian Police.
+Your task is to draft the FIR Tehrir (Incident Narrative) AND perform an event-by-event legal analysis.
 
-Do not merge multiple sections into one blob — each must be independently reviewable.
+Facts (Structured JSON):
+${JSON.stringify(facts, null, 2)}
 
-Output ONLY a JSON array of these objects:
-[
-  { "code": "...", "title": "...", "reason": "...", "confidence": "..." }
-]
-`
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' })
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json'
-      }
+Top Relevant Legal References:
+${JSON.stringify(topLegalReferences, null, 2)}
+
+CRITICAL INSTRUCTIONS:
+1. "incident_narrative": Draft a highly professional, chronological, continuous prose Tehrir addressed to the SHO based strictly on the facts. Do not use bullets. Use standard police shorthand (S/o, D/o).
+2. "incident_analysis": Break down the timeline into individual criminal events. For EACH event, classify the factual act (e.g., "Financial Transaction", "Criminal Intimidation").
+3. "sections": Map the factual acts in the analysis to the provided Legal References. Output candidate sections with reasoning. Never assume legal conclusions without factual ingredients.
+
+Output ONLY a valid JSON object exactly matching this schema:
+{
+  "incident_narrative": "string (The continuous prose Tehrir)",
+  "incident_analysis": [
+    {
+      "event": "string",
+      "classification": "string",
+      "recommended_sections": ["string (section codes)"]
+    }
+  ],
+  "sections": [
+    { 
+      "code": "string", 
+      "title": "string", 
+      "reason": "string (Event-specific reasoning)", 
+      "confidence": "high|medium|low" 
+    }
+  ]
+}
+
+Return ONLY valid JSON matching this schema exactly. Do not include markdown code blocks.`
+
+    const result = await openai.chat.completions.create({
+      model: 'openrouter/free',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      timeout: 30000,
     })
 
-    const responseText = result.response.text()
-    const sections = JSON.parse(responseText)
+    let responseText = result.choices[0]?.message?.content || '{}'
+    
+    const startIdx = responseText.indexOf('{')
+    const endIdx = responseText.lastIndexOf('}')
+    if (startIdx !== -1 && endIdx !== -1 && endIdx >= startIdx) {
+      responseText = responseText.slice(startIdx, endIdx + 1)
+    } else {
+      throw new Error('No JSON object found in response')
+    }
+    
+    const output = JSON.parse(responseText)
 
+    // Atomic Database Update: Saving Narrative AND Sections in one call
     const { error } = await supabase
       .from('fir_drafts')
-      .update({ ai_suggested_sections: sections })
+      .update({ 
+        incident_narrative: output.incident_narrative,
+        ai_suggested_sections: output.sections 
+      })
       .eq('id', draftId)
 
     if (error) throw new Error('Failed to save suggested sections')
 
-    return NextResponse.json({ success: true, sections })
+    return NextResponse.json({ success: true, sections: output.sections, incident_analysis: output.incident_analysis || [] })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error suggesting sections:', error)
+    
+    // Handle Google Generative AI Rate Limit / Quota errors gracefully
+    if (error?.message?.includes('429') || error?.message?.includes('quota')) {
+      return NextResponse.json(
+        { error: 'AI API Rate Limit Exceeded. Please check your Google API plan or try again in a few minutes.' }, 
+        { status: 429 }
+      )
+    }
+
     return NextResponse.json({ error: 'Failed to process' }, { status: 500 })
   }
 }

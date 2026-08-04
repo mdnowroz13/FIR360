@@ -29,7 +29,7 @@ export default async function SectionsPage({ params }: { params: Promise<{ id: s
 
       <div className="bg-white shadow sm:rounded-lg">
         <div className="px-4 py-5 sm:p-6">
-          <SectionReview draftId={draft.id} />
+          <SectionReview draft={draft} />
         </div>
       </div>
     </div>

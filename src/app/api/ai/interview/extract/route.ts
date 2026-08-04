@@ -1,18 +1,21 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import OpenAI from 'openai'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '')
+const openai = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY || ''
+})
 
 export async function POST(request: Request) {
   try {
     const { draftId } = await request.json()
     const supabase = await createClient()
 
-    // 1. Verify user & get draft
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    // 1. Fetch draft (baseline facts)
     const { data: draft } = await supabase
       .from('fir_drafts')
       .select('*')
@@ -24,79 +27,136 @@ export async function POST(request: Request) {
     }
 
     // 2. Fetch answered questions
-    const { data: questions } = await supabase
+    const { data: qas } = await supabase
       .from('fir_interview_questions')
       .select('*')
       .eq('fir_draft_id', draftId)
       .eq('answered', true)
 
-    if (!questions || questions.length === 0) {
-      return NextResponse.json({ success: true }) // Nothing new to extract
+    if (!qas || qas.length === 0) {
+      return NextResponse.json({ success: true, message: 'No new answers to extract.' })
     }
 
-    const qaPairs = questions.map(q => `Q: ${q.question}\nA: ${q.answer}`).join('\n\n')
+    const qaText = qas.map(q => `Q: ${q.question}\nA: ${q.answer}`).join('\n\n')
 
-    // 3. Call Gemini to merge new facts
-    const prompt = `You are updating a structured incident record with newly gathered facts.
-    
-Current Record:
+    const prompt = `You are a Fact Extraction Engine.
+Your task is to merge newly provided answers into the existing structured FIR facts.
+
+EXISTING FACTS:
 ${JSON.stringify({
-  complainant_name: draft.complainant_name,
-  complainant_contact: draft.complainant_contact,
-  complainant_address: draft.complainant_address,
-  incident_narrative: draft.incident_narrative,
-  incident_date: draft.incident_date,
-  incident_time: draft.incident_time,
-  incident_location: draft.incident_location,
-  involved_parties: draft.involved_parties,
-  additional_details: draft.additional_details || {}
+  complainant: draft.complainant,
+  accused: draft.accused,
+  witnesses: draft.witnesses,
+  property: draft.property,
+  evidence: draft.evidence,
+  timeline: draft.timeline,
+  incident_categories: draft.incident_categories
 }, null, 2)}
 
-New Interview Q&A:
-${qaPairs}
+NEW ANSWERS PROVIDED BY COMPLAINANT:
+${qaText}
 
-Task: Update the JSON structure by integrating the new facts from the Q&A into the appropriate fields. If a fact doesn't neatly fit into a specific column (like date/time/location), integrate it smoothly into the "incident_narrative" or put it in the "additional_details" JSON object.
-Maintain chronological order in the narrative if you update it.
-Do not invent anything not stated.
+INSTRUCTIONS:
+1. Extract facts from the NEW ANSWERS.
+2. Update or append these facts to the EXISTING FACTS.
+3. If an answer provides a missing name, age, or address, update the respective object.
+4. If an answer provides new evidence, append it to the evidence array.
+5. If an answer clarifies the timeline, append or update the timeline array.
+6. For any new timeline event, classify it into: 'Criminal Act', 'Financial Transaction', 'Behaviour', 'Observation', 'Communication', 'Administrative Event', or 'Supporting Fact'.
+7. CRITICAL RULES FOR requires_occurrence_details:
+   - Criminal Act: MUST be true.
+   - Financial Transaction: MUST be true.
+   - Behaviour / Observation / Communication / Administrative Event / Supporting Fact: MUST be false unless it forms the core corpus delicti.
+8. Output ONLY the merged, complete JSON object exactly matching the existing schema.
 
-Output ONLY valid JSON matching this schema exactly:
+SCHEMA:
 {
-  "complainant_name": "string | null",
-  "complainant_contact": "string | null",
-  "complainant_address": "string | null",
-  "incident_narrative": "string | null",
-  "incident_date": "YYYY-MM-DD | null",
-  "incident_time": "HH:MM:SS | null",
-  "incident_location": "string | null",
-  "involved_parties": [{"name": "string", "role": "string", "address": "string"}],
-  "additional_details": {"key": "value"}
-}`
+  "complainant": {
+    "name": "string | null",
+    "father_name": "string | null",
+    "mother_name": "string | null",
+    "spouse_name": "string | null",
+    "age": "number | null",
+    "dob": "YYYY-MM-DD | null",
+    "gender": "string | null",
+    "occupation": "string | null",
+    "address": "string | null",
+    "id_details": "string | null"
+  },
+  "accused": [
+    {
+      "name": "string",
+      "alias": "string | null",
+      "relative_name": "string | null",
+      "address": "string | null"
+    }
+  ],
+  "property": [
+    {
+      "category": "string",
+      "type": "string",
+      "description": "string",
+      "estimated_value": "number | null"
+    }
+  ],
+  "witnesses": [
+    {
+      "name": "string",
+      "address": "string | null",
+      "contact": "string | null"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "string (e.g. UPI, WhatsApp, CCTV)",
+      "description": "string"
+    }
+  ],
+  "timeline": [
+    {
+      "event_title": "string",
+      "event_category": "Criminal Act | Financial Transaction | Behaviour | Observation | Communication | Administrative Event | Supporting Fact",
+      "requires_occurrence_details": true,
+      "date": "string | null",
+      "time": "string | null",
+      "location": "string | null",
+      "actors": ["string"]
+    }
+  ],
+  "incident_categories": ["string"]
+}
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' })
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0,
-        responseMimeType: 'application/json'
-      }
+Return ONLY valid JSON. Do not include markdown blocks.`
+
+    const result = await openai.chat.completions.create({
+      model: 'openrouter/free',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      timeout: 30000,
     })
 
-    const responseText = result.response.text()
+    let responseText = result.choices[0]?.message?.content || '{}'
+    
+    const startIdx = responseText.indexOf('{')
+    const endIdx = responseText.lastIndexOf('}')
+    if (startIdx !== -1 && endIdx !== -1 && endIdx >= startIdx) {
+      responseText = responseText.slice(startIdx, endIdx + 1)
+    } else {
+      throw new Error('No JSON object found in response')
+    }
+
     const updatedData = JSON.parse(responseText)
 
-    // 4. Save updated facts
     const { error } = await supabase
       .from('fir_drafts')
       .update({
-        complainant_name: updatedData.complainant_name,
-        complainant_contact: updatedData.complainant_contact,
-        complainant_address: updatedData.complainant_address,
-        incident_narrative: updatedData.incident_narrative,
-        incident_date: updatedData.incident_date,
-        incident_time: updatedData.incident_time,
-        incident_location: updatedData.incident_location,
-        involved_parties: updatedData.involved_parties,
-        additional_details: updatedData.additional_details
+        complainant: updatedData.complainant,
+        accused: updatedData.accused,
+        witnesses: updatedData.witnesses || [],
+        evidence: updatedData.evidence || [],
+        timeline: updatedData.timeline || [],
+        property: updatedData.property,
+        incident_categories: updatedData.incident_categories || []
       })
       .eq('id', draftId)
 

@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  
+  --font-sans: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif-4), ui-serif, Georgia, serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  
+  /* Brand Colors - The Case File */
+  --color-ink: #16233D;
+  --color-paper: #F7F5F0;
+  --color-surface: #FFFFFF;
+  --color-rule: #D8D3C7;
+  --color-stamp: #8C2F39;
+  --color-brass: #A9824C;
+  --color-muted: #6B6455;
+  
+  /* Semantic Colors */
+  --color-success: #2F6844;
+  --color-warning: #B7791F;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --ink: #16233D;
+  --paper: #F7F5F0;
+  --surface: #FFFFFF;
+  --rule: #D8D3C7;
+  --stamp: #8C2F39;
+  --brass: #A9824C;
+  --muted: #6B6455;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure smooth scrolling */
+html {
+  scroll-behavior: smooth;
 }

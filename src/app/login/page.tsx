@@ -2,7 +2,7 @@
 
 import { createClient } from '@/utils/supabase/client'
 import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Shield } from 'lucide-react'
 
 export default function LoginPage() {
   const supabase = createClient()
@@ -24,25 +24,36 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">FIR Assistant</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in to access the investigative interview dashboard
-          </p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--paper)] px-4 sm:px-6 lg:px-8 selection:bg-[var(--brass)]/30">
+      <div className="w-full max-w-sm border border-[var(--rule)] bg-[var(--surface)] p-10 relative">
+        {/* Subtle decorative "official" corner marker */}
+        <div className="absolute top-0 right-0 w-8 h-8 border-l border-b border-[var(--rule)] bg-[var(--paper)] flex items-center justify-center">
+          <span className="text-[8px] font-mono text-[var(--muted)]">AUTH</span>
         </div>
         
-        <div className="mt-8 space-y-6">
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="flex flex-col items-center gap-2">
+            <Shield className="h-10 w-10 text-[var(--ink)]" strokeWidth={1.5} />
+            <span className="text-xl font-serif font-bold tracking-tight text-[var(--ink)]">FIR360</span>
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-2xl font-serif tracking-tight text-[var(--ink)]">Officer Login</h2>
+            <p className="text-xs font-mono uppercase tracking-widest text-[var(--muted)] border-b border-[var(--rule)] border-dashed pb-2 inline-block">
+              Authorized Personnel Only
+            </p>
+          </div>
+        </div>
+        
+        <div className="pt-10">
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="flex w-full items-center justify-center gap-3 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus-visible:ring-transparent disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-3 bg-[var(--surface)] px-4 py-3 text-sm font-medium text-[var(--ink)] border border-[var(--rule)] hover:bg-[var(--rule)]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--stamp)] disabled:opacity-50 transition-colors rounded-sm"
           >
             {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+              <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
             ) : (
-              <svg className="h-5 w-5" aria-hidden="true" viewBox="0 0 24 24">
+              <svg className="h-4 w-4 grayscale opacity-80" aria-hidden="true" viewBox="0 0 24 24">
                 <path
                   d="M12.0003 4.75C13.7703 4.75 15.3553 5.36002 16.6053 6.54998L20.0303 3.125C17.9502 1.19 15.2353 0 12.0003 0C7.31028 0 3.25527 2.69 1.28027 6.60998L5.27028 9.70498C6.21525 6.86002 8.87028 4.75 12.0003 4.75Z"
                   fill="#EA4335"
@@ -63,6 +74,11 @@ export default function LoginPage() {
             )}
             Sign in with Google
           </button>
+          
+          <div className="mt-8 text-center text-xs font-mono text-[var(--muted)] space-y-1">
+            <p>PROTECTED BY GOVT-GRADE ENCRYPTION</p>
+            <p>ALL ACCESS IS LOGGED AND MONITORED</p>
+          </div>
         </div>
       </div>
     </div>
