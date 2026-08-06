@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, ArrowRight, Info, CheckCircle2, User, AlertCircle, FolderOpen, FileText } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useDialog } from '@/components/DialogProvider'
 import { createClient } from '@/utils/supabase/client'
 import { motion } from 'framer-motion'
 
@@ -16,6 +17,7 @@ export default function InterviewCapture({ draftId }: { draftId: string }) {
   const [thinkingStep, setThinkingStep] = useState(0)
   
   const router = useRouter()
+  const { showAlert } = useDialog()
   const supabase = createClient()
   const fetchedRef = useRef(false)
 
@@ -86,7 +88,7 @@ export default function InterviewCapture({ draftId }: { draftId: string }) {
       router.push(`/dashboard/draft/${draftId}/sections`)
     } catch (err) {
       console.error(err)
-      alert('Failed to save answers')
+      showAlert('Save Error', 'Failed to save answers')
       setSaving(false)
       setThinkingStep(0)
     }

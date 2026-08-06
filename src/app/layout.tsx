@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Source_Serif_4, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { DialogProvider } from "@/components/DialogProvider";
 import "./globals.css";
 
 const sourceSerif = Source_Serif_4({
@@ -32,9 +33,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${sourceSerif.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans bg-[var(--paper)] text-[var(--ink)]">{children}</body>
+      <body className="min-h-full flex flex-col font-sans bg-[var(--paper)] text-[var(--ink)]">
+        <DialogProvider>
+          {children}
+        </DialogProvider>
+      </body>
     </html>
   );
 }

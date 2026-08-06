@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Mic, MicOff, Loader2, FileText } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useDialog } from '@/components/DialogProvider'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function NarrativeCapture({ draftId, initialTranscript }: { draftId: string, initialTranscript?: string | null }) {
@@ -11,6 +12,7 @@ export default function NarrativeCapture({ draftId, initialTranscript }: { draft
   const [isProcessing, setIsProcessing] = useState(false)
   const recognitionRef = useRef<any>(null)
   const router = useRouter()
+  const { showAlert } = useDialog()
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -42,7 +44,7 @@ export default function NarrativeCapture({ draftId, initialTranscript }: { draft
 
   const toggleRecording = () => {
     if (!recognitionRef.current) {
-      alert('Speech recognition is not supported in this browser. Please type the narrative instead.')
+      showAlert('Unsupported Browser', 'Speech recognition is not supported in this browser. Please type the narrative instead.')
       return
     }
 
@@ -75,7 +77,7 @@ export default function NarrativeCapture({ draftId, initialTranscript }: { draft
       router.refresh()
     } catch (error) {
       console.error(error)
-      alert('Error processing narrative. Please try again.')
+      showAlert('Processing Error', 'Error processing narrative. Please try again.')
     } finally {
       setIsProcessing(false)
     }
@@ -94,13 +96,18 @@ export default function NarrativeCapture({ draftId, initialTranscript }: { draft
         <div className={`absolute inset-0 bg-[var(--stamp)]/5 rounded-sm opacity-0 transition-opacity duration-500 pointer-events-none ${isRecording ? 'opacity-100 animate-pulse' : ''}`} />
         
         <div className="relative bg-[var(--surface)] overflow-hidden flex flex-col flex-1 min-h-[200px]">
-          {/* Lined paper effect background */}
-          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(transparent, transparent 31px, var(--rule) 32px)', backgroundPositionY: '32px' }}></div>
-          
+          {/* Lined paper effect applied directly to textarea to scroll with text */}
           <textarea
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
-            className="flex-1 w-full resize-none border-0 py-8 px-4 md:px-8 text-[var(--ink)] font-serif text-base md:text-lg placeholder:font-sans placeholder:text-sm placeholder:text-[var(--muted)] bg-transparent focus:ring-0 leading-[32px] relative z-10"
+            style={{ 
+              backgroundImage: 'repeating-linear-gradient(transparent, transparent 31px, var(--rule) 32px)',
+              backgroundAttachment: 'local',
+              paddingTop: '32px',
+              paddingBottom: '32px',
+              lineHeight: '32px',
+            }}
+            className="flex-1 w-full resize-none border-0 px-4 md:px-8 text-[var(--ink)] font-serif text-base md:text-lg placeholder:text-[var(--muted)] bg-transparent focus:ring-0 relative z-10"
             placeholder="E.g., Yesterday at around 8 PM, I was walking near the main market when two men on a bike..."
           />
           

@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { Search } from 'lucide-react'
 import DeleteFirButton from '@/components/DeleteFirButton'
+import InitiateFirButton from '@/components/InitiateFirButton'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -36,12 +37,11 @@ export default async function DashboardPage() {
           <p className="font-mono text-xs tracking-widest text-[var(--muted)] mt-2 uppercase">Official Investigation Records</p>
         </div>
         <div>
-          <Link 
-            href="/dashboard/new"
+          <InitiateFirButton 
             className="inline-flex items-center gap-2 bg-[var(--ink)] px-6 py-2.5 text-xs font-mono font-bold uppercase tracking-widest text-[var(--paper)] hover:bg-[#0f172a] transition-colors rounded-sm"
           >
             [+] Initiate File
-          </Link>
+          </InitiateFirButton>
         </div>
       </div>
 
@@ -80,12 +80,11 @@ export default async function DashboardPage() {
         {!drafts || drafts.length === 0 ? (
           <div className="text-center border border-[var(--rule)] bg-[var(--surface)] px-6 py-24 rounded-sm">
             <p className="font-mono text-sm text-[var(--muted)] uppercase tracking-widest mb-4">NO RECORDS FOUND IN REGISTRY</p>
-            <Link 
-              href="/dashboard/new"
+            <InitiateFirButton 
               className="inline-flex items-center gap-2 border border-[var(--rule)] bg-[var(--paper)] px-6 py-2 text-xs font-mono font-bold uppercase tracking-widest text-[var(--ink)] hover:bg-[var(--rule)]/20 transition-colors rounded-sm"
             >
               Initiate First File
-            </Link>
+            </InitiateFirButton>
           </div>
         ) : (
           <div className="space-y-4">

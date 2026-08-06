@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Loader2, ArrowRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useDialog } from '@/components/DialogProvider'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface Section {
@@ -19,6 +20,7 @@ export default function SectionReview({ draft }: { draft: any }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const router = useRouter()
+  const { showAlert } = useDialog()
 
   useEffect(() => {
     const fetchSections = async () => {
@@ -31,7 +33,7 @@ export default function SectionReview({ draft }: { draft: any }) {
       
       if (!res.ok) {
         setLoading(false)
-        alert(data.error || 'Failed to suggest sections.')
+        showAlert('Error', data.error || 'Failed to suggest sections.')
         return
       }
 

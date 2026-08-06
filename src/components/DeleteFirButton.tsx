@@ -4,23 +4,27 @@ import { useState } from 'react'
 import { Trash2, Loader2 } from 'lucide-react'
 import { deleteFirDraft } from '@/app/actions/fir'
 import { useRouter } from 'next/navigation'
+import { useDialog } from '@/components/DialogProvider'
 
 export default function DeleteFirButton({ draftId }: { draftId: string }) {
   const [isDeleting, setIsDeleting] = useState(false)
   const router = useRouter()
+  const { showConfirm, showAlert } = useDialog()
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     
-    if (confirm('Are you sure you want to delete this FIR draft? This action cannot be undone.')) {
+    const confirmed = await showConfirm('Delete File', 'Are you sure you want to permanently delete this FIR draft? This action cannot be undone.')
+    
+    if (confirmed) {
       setIsDeleting(true)
       try {
         await deleteFirDraft(draftId)
         router.refresh()
       } catch (error) {
         console.error(error)
-        alert('Failed to delete FIR draft')
+        await showAlert('Error', 'Failed to delete FIR draft.')
         setIsDeleting(false)
       }
     }

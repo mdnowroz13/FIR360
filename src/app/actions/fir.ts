@@ -25,7 +25,7 @@ export async function createFirDraft() {
     throw new Error('Failed to create FIR draft')
   }
 
-  redirect(`/dashboard/draft/${draft.id}`)
+  return draft.id
 }
 export async function deleteFirDraft(draftId: string) {
   const supabase = await createClient()

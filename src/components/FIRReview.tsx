@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, FileDown, CheckSquare, ShieldCheck } from 'lucide-react'
+import { Loader2, FileDown, ShieldCheck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useDialog } from '@/components/DialogProvider'
 import { createClient } from '@/utils/supabase/client'
 import { pdf } from '@react-pdf/renderer'
 import { FIRPdfDocument } from './FIRPdfDocument'
@@ -12,6 +13,7 @@ export default function FIRReview({ draft, officer }: { draft: any, officer: any
   const [confirmed, setConfirmed] = useState(false)
   const [generating, setGenerating] = useState(false)
   const router = useRouter()
+  const { showAlert } = useDialog()
   const supabase = createClient()
 
   const handleGenerate = async () => {
@@ -60,7 +62,7 @@ export default function FIRReview({ draft, officer }: { draft: any, officer: any
       router.refresh()
     } catch (e) {
       console.error(e)
-      alert('Failed to generate FIR. Please try again.')
+      showAlert('Generation Failed', 'Failed to generate FIR. Please try again.')
       setGenerating(false)
     }
   }
