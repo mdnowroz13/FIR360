@@ -54,6 +54,7 @@ export default async function DashboardLayout({
                 <form action={signOut}>
                   <button 
                     type="submit"
+                    suppressHydrationWarning={true}
                     className="p-2 text-[var(--ink)] hover:text-[var(--stamp)] hover:bg-[var(--rule)]/20 transition-colors ml-2 border border-transparent hover:border-[var(--rule)] rounded-sm flex items-center justify-center"
                     title="Sign out"
                   >

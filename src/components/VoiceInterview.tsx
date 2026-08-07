@@ -1,16 +1,96 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   LiveKitRoom,
   useVoiceAssistant,
   useRoomContext,
-  BarVisualizer,
-  RoomAudioRenderer
+  RoomAudioRenderer,
+  useLocalParticipant,
+  useTracks
 } from '@livekit/components-react'
-import { RoomEvent, TranscriptionSegment, RemoteParticipant } from 'livekit-client'
-import { Loader2, Mic, BrainCircuit, Volume2, AlertCircle, RefreshCcw, CheckCircle } from 'lucide-react'
+import { RoomEvent, TranscriptionSegment, RemoteParticipant, Track } from 'livekit-client'
+import { Loader2, Mic, BrainCircuit, Volume2, AlertCircle, RefreshCcw, CheckCircle, PhoneOff } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+/* ── Custom Audio Visualizer ────────────────────────────────────── */
+function AudioVisualizer({ label, color, trackPublication }: { 
+  label: string, 
+  color: string,
+  trackPublication?: any 
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const animRef = useRef<number>(0)
+
+  useEffect(() => {
+    const track = trackPublication?.track
+    if (!track) return
+
+    const mediaStream = track.mediaStream as MediaStream | undefined
+    if (!mediaStream) return
+
+    try {
+      const audioCtx = new AudioContext()
+      const source = audioCtx.createMediaStreamSource(mediaStream)
+      const analyser = audioCtx.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.7
+      source.connect(analyser)
+      analyserRef.current = analyser
+
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      const draw = () => {
+        animRef.current = requestAnimationFrame(draw)
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+        analyser.getByteFrequencyData(dataArray)
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        const barCount = 7
+        const barWidth = canvas.width / (barCount * 2)
+        const gap = barWidth
+
+        for (let i = 0; i < barCount; i++) {
+          const dataIndex = Math.floor((i / barCount) * bufferLength * 0.5)
+          const value = dataArray[dataIndex] / 255
+          const barHeight = Math.max(4, value * canvas.height * 0.9)
+
+          const x = i * (barWidth + gap) + gap / 2
+          const y = (canvas.height - barHeight) / 2
+
+          ctx.fillStyle = color
+          ctx.beginPath()
+          ctx.roundRect(x, y, barWidth, barHeight, 3)
+          ctx.fill()
+        }
+      }
+
+      draw()
+
+      return () => {
+        cancelAnimationFrame(animRef.current)
+        audioCtx.close()
+      }
+    } catch (e) {
+      console.warn('AudioVisualizer error:', e)
+    }
+  }, [trackPublication, color])
+
+  return (
+    <div className="flex flex-col items-center">
+      <span className="text-[10px] font-mono tracking-widest uppercase text-[var(--muted)] mb-2">{label}</span>
+      <div className="h-14 w-28 bg-[var(--surface)] border border-[var(--rule)] rounded-sm flex items-center justify-center p-1 overflow-hidden">
+        <canvas ref={canvasRef} width={112} height={48} className="w-full h-full" />
+      </div>
+    </div>
+  )
+}
 
 export default function VoiceInterview({ draftId, language, onSwitchToText }: { draftId: string, language: string, onSwitchToText: () => void }) {
   const [token, setToken] = useState<string | null>(null)
@@ -107,10 +187,17 @@ export default function VoiceInterview({ draftId, language, onSwitchToText }: { 
 }
 
 function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () => void, onFinalized: () => void }) {
-  const { state, agent } = useVoiceAssistant()
+  const { state, agent, audioTrack } = useVoiceAssistant()
   const room = useRoomContext()
-  const [transcripts, setTranscripts] = useState<{id: string, text: string, isAgent: boolean}[]>([])
+  const { localParticipant } = useLocalParticipant()
+  const tracks = useTracks([Track.Source.Microphone], { onlySubscribed: false })
+  const [transcripts, setTranscripts] = useState<{id: string, text: string, isAgent: boolean, startTime: Date, endTime: Date}[]>([])
   const [agentFound, setAgentFound] = useState(true)
+
+  // Get the local microphone track publication
+  const localMicTrack = tracks.find(
+    (t) => t.participant.identity === localParticipant.identity && t.source === Track.Source.Microphone
+  )?.publication
 
   // Timeout logic: if agent doesn't join within 10s, show error
   useEffect(() => {
@@ -132,9 +219,9 @@ function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () =>
           const isAgent = participant?.identity.startsWith('agent') || false
           const existingIdx = next.findIndex(t => t.id === segment.id)
           if (existingIdx >= 0) {
-            next[existingIdx] = { ...next[existingIdx], text: segment.text }
+            next[existingIdx] = { ...next[existingIdx], text: segment.text, endTime: new Date() }
           } else {
-            next.push({ id: segment.id, text: segment.text, isAgent })
+            next.push({ id: segment.id, text: segment.text, isAgent, startTime: new Date(), endTime: new Date() })
           }
         }
         return next
@@ -218,16 +305,6 @@ function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () =>
         </div>
       </div>
 
-      {/* End Session Button */}
-      <div className="absolute top-4 right-4 z-10">
-        <button
-          onClick={onSwitchToText}
-          className="inline-flex items-center gap-2 bg-[var(--error)] text-white px-4 py-2 font-mono text-xs uppercase tracking-widest shadow-sm hover:opacity-90"
-        >
-          End Voice Session
-        </button>
-      </div>
-
       <div className="w-full max-w-2xl space-y-12">
         {/* Visualizer & Status */}
         <div className="flex flex-col items-center justify-center space-y-6">
@@ -245,16 +322,14 @@ function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () =>
             <span className={colorClass}>[{statusText}]</span>
           </div>
 
-          {state === 'speaking' && (
-            <div className="h-8 w-32">
-               <BarVisualizer state={state} barCount={5} options={{ minHeight: 4 }} trackRef={undefined as any} />
-               {/* LiveKit BarVisualizer needs trackRef, but we can fake it or just use an animation */}
-            </div>
-          )}
+          <div className="flex flex-row items-center gap-8 justify-center mt-4">
+            <AudioVisualizer label="Your Mic" color="#16a34a" trackPublication={localMicTrack} />
+            <AudioVisualizer label="Agent" color="#3b82f6" trackPublication={audioTrack?.publication} />
+          </div>
         </div>
 
         {/* Live Captions Window */}
-        <div className="border border-[var(--rule)] bg-[var(--paper)] p-4 h-48 overflow-y-auto rounded-sm relative">
+        <div className="border border-[var(--rule)] bg-[var(--paper)] p-4 h-48 overflow-y-auto rounded-sm relative shadow-inner">
           <div className="absolute top-0 left-0 bg-[var(--rule)] text-[var(--paper)] text-[10px] font-mono px-2 py-0.5 uppercase tracking-widest">
             Live Transcript
           </div>
@@ -268,7 +343,7 @@ function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () =>
                   className={`flex flex-col ${t.isAgent ? 'items-start' : 'items-end'}`}
                 >
                   <span className={`text-[10px] uppercase tracking-widest mb-1 ${t.isAgent ? 'text-[var(--warning)]' : 'text-[var(--success)]'}`}>
-                    {t.isAgent ? 'Interviewer' : 'Officer/Complainant'}
+                    {t.isAgent ? 'Interviewer' : 'Officer/Complainant'} • [Started {t.startTime.toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit'})} - Ended {t.endTime.toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit'})}]
                   </span>
                   <p className={`p-2 rounded-sm max-w-[80%] ${t.isAgent ? 'bg-[var(--surface)] border border-[var(--rule)] text-[var(--ink)]' : 'bg-[#f1f5f9] text-[#0f172a]'}`}>
                     {t.text}
@@ -281,6 +356,17 @@ function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () =>
             )}
             <div ref={transcriptEndRef} />
           </div>
+        </div>
+        
+        {/* BIG Prominent End Session Button */}
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={onSwitchToText}
+            className="inline-flex items-center gap-3 bg-red-600 text-white px-8 py-4 font-mono text-sm uppercase tracking-widest font-bold shadow-lg hover:bg-red-700 transition-colors rounded-sm group"
+          >
+            <PhoneOff className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            END VOICE SESSION
+          </button>
         </div>
       </div>
     </div>

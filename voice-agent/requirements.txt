@@ -6,3 +6,4 @@ pydub
 livekit-plugins-silero<1.0.0
 supabase
 python-dotenv
+websockets>=11.0.0

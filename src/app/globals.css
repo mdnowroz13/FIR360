@@ -44,3 +44,6 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+.lk-audio-bar { background-color: #16a34a !important; border-radius: 4px; width: 6px; }
+

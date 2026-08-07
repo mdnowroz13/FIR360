@@ -1,13 +1,15 @@
 import os
 import json
 import logging
+import re
 from dotenv import load_dotenv
 from livekit.agents import AutoSubscribe, JobContext, JobProcess, WorkerOptions, cli, llm
 from livekit.agents.pipeline import VoicePipelineAgent
 from livekit.plugins import openai, groq, silero
 from supabase import create_client, Client
 from livekit.agents.llm.fallback_adapter import FallbackAdapter
-from edge_tts_provider import EdgeTTS
+from sarvam_realtime_stt import SarvamRealtimeSTT
+from sarvam_tts_provider import SarvamTTS
 
 load_dotenv()
 logger = logging.getLogger("voice-agent")
@@ -82,8 +84,10 @@ class FIRAssistantInterface(llm.FunctionContext):
             await self.agent.say(msg, allow_interruptions=False)
             await asyncio.sleep(4)
             # Send distinct success signal to frontend
-            packet = rtc.DataPacket(data=json.dumps({"type": "finalized"}).encode("utf-8"), kind=rtc.DataPacketKind.RELIABLE)
-            await self.room.local_participant.publish_data(packet.data)
+            await self.room.local_participant.publish_data(
+                payload=json.dumps({"type": "finalized"}).encode("utf-8"),
+                reliable=True
+            )
             await self.room.disconnect()
             
         import asyncio
@@ -112,16 +116,40 @@ async def entrypoint(ctx: JobContext):
         role="system",
         text=(
             "You are a Voice Assistant for FIR360, a police FIR generation tool. "
-            "You interview the officer or complainant, transcribe their account, "
-            "and ask follow up questions to fill missing facts. "
-            "First, gather the initial incident description from the user. "
-            "Once you have a clear initial picture, MUST call 'save_initial_statement' to save it to the registry. "
-            "Then, seamlessly transition into asking follow-up questions to fill in missing facts (acting as the Gap Analysis engine). "
-            "Call functions to update fields, suggest sections, and finalize. "
-            "CRITICAL: DO NOT call confirm_and_finalize until you have explicitly asked the user 'Do you confirm this report?' out loud and received a 'Yes' or 'Confirmed' reply. "
-            f"CRITICAL REQUIREMENT: The user has selected the language code '{language_code}'. "
-            "You MUST speak, formulate questions, and respond ONLY in the language that corresponds to this code. "
-            "For example, if the code is 'hi-IN', you must reply in Hindi using Devanagari script. If 'ta-IN', use Tamil. "
+            "You interview the officer or complainant to build a complete First Information Report. "
+            "\n\nYOUR INTERVIEW WORKFLOW (follow this strictly):\n"
+            "1. GREETING: Greet the user and ask them to narrate the incident in their own words.\n"
+            "2. LISTEN PATIENTLY: Let the user speak their full account WITHOUT interrupting. "
+            "Wait for them to finish completely (they will pause for several seconds). "
+            "Do NOT call save_initial_statement after hearing just one or two words.\n"
+            "3. SAVE STATEMENT: Only after the user has given a substantial account (at least 2-3 sentences), call save_initial_statement.\n"
+            "4. GAP ANALYSIS: After saving, ask follow-up questions ONE AT A TIME to fill missing details like: "
+            "location, date/time, suspect description, victim details, property involved, witnesses.\n"
+            "5. LEGAL SECTIONS: Once you have enough facts, suggest relevant IPC/BNS sections.\n"
+            "6. CONFIRMATION: Only after ALL gaps are filled AND you have explicitly read back a summary of the report, "
+            "ask 'Do you confirm this report?' and wait for an explicit 'Yes' or 'Confirmed' or 'Okay' response.\n"
+            "7. FINALIZE: Only then call confirm_and_finalize with officer_confirmed=True.\n"
+            "\nCRITICAL RULES:\n"
+            "- NEVER finalize after hearing just 'sir', 'okay', 'hmm', or any filler word during the interview. "
+            "These are NOT confirmations — they are conversational fillers.\n"
+            "- A confirmation ONLY counts if you have explicitly asked 'Do you confirm this report?' and the user said yes.\n"
+            "- If you have flagged missing fields, you MUST ask about ALL of them before finalizing.\n"
+            "- Be patient. Police officers and complainants take time to narrate incidents.\n"
+            "- STT CORRECTION: STT systems often mishear Indic words (e.g., 'దంగల్ పడ్డారు' instead of 'దొంగలు పడ్డారు'). "
+            "If a transcribed phrase sounds contextually or phonetically wrong, YOU MUST NOT assume it is correct. "
+            "Instead, politely ask the user to clarify: 'క్షమించండి, ఆ మాట స్పష్టంగా వినిపించలేదు. దయచేసి మరోసారి చెప్పగలరా?' (Sorry, that word wasn't clear. Can you say it again?).\n"
+            "\nFUNCTION CALLING RULES:\n"
+            "- When you want to call a function (save_initial_statement, update_incident_field, etc.), "
+            "use the TOOL/FUNCTION CALLING mechanism provided by the system. "
+            "NEVER write function names, XML tags, JSON, or code in your spoken response.\n"
+            "- Your spoken response must contain ONLY natural human speech — no tags, no brackets, no code.\n"
+            "- ECHO DETECTION: Sometimes your own previous spoken words get picked up by the microphone "
+            "and sent back to you as if the user said them. If the 'user' message looks identical or very similar "
+            "to what you JUST said, IGNORE it completely — do not respond, do not call any functions. "
+            "Just wait for the real user to speak.\n"
+            f"\nLANGUAGE: The user selected '{language_code}'. "
+            "You MUST speak and respond ONLY in this language. "
+            "For 'hi-IN' use Hindi (Devanagari), 'te-IN' use Telugu, 'ta-IN' use Tamil, etc. "
             "Never reply in English unless the code is en-IN."
         ),
     )
@@ -129,15 +157,64 @@ async def entrypoint(ctx: JobContext):
     fnc_ctx = FIRAssistantInterface(draft_id=draft_id)
     fnc_ctx.language_code = language_code
     
+    # Filter function-call artifacts from being spoken by TTS
+    def _clean_tts_text(text: str) -> str:
+        # Strip XML-style function call tags and their contents
+        cleaned = re.sub(r'<[^>]+>.*?</[^>]+>', '', text, flags=re.DOTALL)
+        # Strip any remaining standalone XML tags
+        cleaned = re.sub(r'</?[a-zA-Z_][^>]*>', '', cleaned)
+        # Strip JSON-like objects
+        cleaned = re.sub(r'\{[^}]+\}', '', cleaned)
+        # Clean up extra whitespace
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned
+
+    def before_tts_cb(agent: VoicePipelineAgent, text):
+        if isinstance(text, str):
+            cleaned = _clean_tts_text(text)
+            return cleaned if cleaned else ""
+        else:
+            # It's an async generator of LLM tokens — wrap it to filter each chunk
+            async def _filter_stream():
+                buffer = ""
+                async for chunk in text:
+                    buffer += chunk
+                    # Only yield once we have a complete sentence or enough text
+                    # Check if buffer contains any XML/JSON to strip
+                    if '<' in buffer and '>' not in buffer:
+                        continue  # wait for closing bracket
+                    if '{' in buffer and '}' not in buffer:
+                        continue  # wait for closing brace
+                    cleaned = _clean_tts_text(buffer)
+                    if cleaned:
+                        yield cleaned
+                    buffer = ""
+                # Flush remaining buffer
+                if buffer:
+                    cleaned = _clean_tts_text(buffer)
+                    if cleaned:
+                        yield cleaned
+            return _filter_stream()
+
     def before_llm_cb(agent: VoicePipelineAgent, chat_ctx: llm.ChatContext):
         # 1. Stop LLM synthesis if finalized
         if getattr(fnc_ctx, "finalized", False):
             return False
             
-        # 2. Truncate context for Groq TPM Limit (keep system + tools + last 10)
-        if len(chat_ctx.messages) > 12:
+        # 2. Filter filler words to save TPM limit
+        if len(chat_ctx.messages) > 0:
+            last_msg = chat_ctx.messages[-1]
+            if last_msg.role == "user" and type(last_msg.content) is str:
+                text = last_msg.content.strip().lower()
+                fillers = ["అ", "ఆ", "ఉం", "సార్", "హలో", "అ అ", "ah", "hmm", "sir", "hello", "ok", "okay"]
+                if text in fillers:
+                    logger.info(f"Skipping LLM call for filler word: {text}")
+                    return False
+
+        # 3. Truncate context for Groq TPM Limit (keep system + tools + last 6 conversational turns)
+        if len(chat_ctx.messages) > 8:
             retained = []
-            recent = chat_ctx.messages[-10:]
+            recent = chat_ctx.messages[-6:]
             for i, msg in enumerate(chat_ctx.messages):
                 if i == 0 or msg.role == "tool" or getattr(msg, "tool_calls", None):
                     if msg not in recent:
@@ -161,33 +238,46 @@ async def entrypoint(ctx: JobContext):
         stream._task.add_done_callback(on_stream_done)
         return stream
 
-    # Setup LLMs (Groq as Primary, NVIDIA as Fallback)
+    # Setup LLMs (Groq as Primary — fast for real-time voice, NVIDIA as Fallback — larger model)
     primary_llm = groq.LLM(
         api_key=os.environ.get("GROQ_API_KEY"),
-        model="llama-3.3-70b-versatile"
+        model="llama-3.1-8b-instant"
     )
+    import openai as oai_client
     fallback_llm = openai.LLM(
         base_url="https://integrate.api.nvidia.com/v1",
         api_key=os.environ.get("NVIDIA_API_KEY"),
-        model="meta/llama-3.3-70b-instruct"
+        model="meta/llama-3.3-70b-instruct",
+        client=oai_client.AsyncClient(
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key=os.environ.get("NVIDIA_API_KEY"),
+            timeout=10.0
+        )
     )
     
-    # Use native LiveKit FallbackAdapter with tight timeouts to failover fast
+    # Groq FIRST (fast, reliable), NVIDIA as fallback (larger but slower)
     llm_instance = FallbackAdapter(
         llm=[primary_llm, fallback_llm],
-        attempt_timeout=5.0,
+        attempt_timeout=10.0,
         max_retry_per_llm=1
     )
 
+    # Setup STT — Sarvam AI STT
+    stt_instance = SarvamRealtimeSTT(language=language_code)
+    logger.info(f"Using Sarvam Realtime STT for language: {language_code}")
+
     agent = VoicePipelineAgent(
         vad=silero.VAD.load(),
-        stt=groq.STT(model="whisper-large-v3", language=language_code.split('-')[0]),
+        stt=stt_instance,
         llm=llm_instance,
-        tts=EdgeTTS(language_code=language_code),
+        tts=SarvamTTS(language=language_code),
         chat_ctx=initial_ctx,
         fnc_ctx=fnc_ctx,
+        min_endpointing_delay=1.5,
+        max_endpointing_delay=4.0,
         max_nested_fnc_calls=5,
         before_llm_cb=before_llm_cb,
+        before_tts_cb=before_tts_cb,
     )
     
     fnc_ctx.agent = agent
