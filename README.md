@@ -22,15 +22,26 @@ I believe I should be chosen for the Dharamshala program because I want to take 
 5. **Human-in-the-Loop Confirmation**: The officer reviews the AI's suggestions, makes any necessary edits or overrides, and finalizes the legal sections.
 6. **FIR Generation**: The system automatically drafts the official FIR document and generates a ready-to-print PDF.
 
-## 🧠 How AI is Actually Used
+## 🧠 The AI Recipe (How AI is Actually Used)
 
-FIR360 doesn't just treat AI as a chatbot. It integrates LLMs into specific, structured pipeline steps:
-* **Information Extraction & Structuring**: Transforming unstructured narratives into a JSON-based factual timeline.
-* **Logic & Gap Detection**: Analyzing the extracted facts against standard investigative requirements to dynamically generate targeted follow-up questions.
-* **Semantic Legal Matching**: Mapping the verified facts to the Bharatiya Nyaya Sanhita (BNS) penal code to suggest highly relevant charges.
-* **Generative Drafting**: Producing the final, legally-formatted "Tehrir" (official narrative) for the FIR document.
+FIR360 doesn't just treat AI as a generic chatbot. We engineered a strict, multi-step pipeline (the "Recipe") to ensure legal reliability:
+
+* **Workflow & Pipeline**: The system breaks the complex task of FIR generation into distinct, manageable steps (Classification -> Extraction -> Gap Detection -> Legal Suggestion -> Drafting). Each step passes state through Supabase, allowing human intervention at critical junctions.
+* **Prompts & Logic**: We use highly constrained system prompts with strict rules (e.g., *"Never hallucinate facts. If time is missing, ask for it."*). Prompts are tailored for the BNS (Bharatiya Nyaya Sanhita) framework.
+* **Validation**: All LLM outputs are forced into JSON formats and strictly validated against **Zod schemas** in our Next.js API routes before being written to the database. If the AI deviates, the system catches it.
+* **Tool Choices**: We utilize the **Gemini API** for high-context reasoning and legal semantic mapping, with **OpenRouter** available for flexible model fallbacks.
+* **Verification**: The AI *never* writes the final FIR directly. It populates intermediary states (e.g., drafted questions, suggested BNS sections) that the officer must explicitly verify and approve through the UI.
 
 *(Note: While real-time voice AI capabilities via LiveKit are part of the architecture, they are temporarily disabled in the current hackathon build to ensure maximum stability.)*
+
+## 🤖 Development with AI
+
+A massive part of this submission is *how* it was built. FIR360 was developed using an advanced AI engineering workflow:
+
+* **Antigravity IDE**: The entire application was built using Google's Antigravity agentic coding assistant, functioning as an autonomous pair programmer.
+* **Supabase MCP**: The agent utilized the Supabase Model Context Protocol (MCP) to automatically inspect our database schemas, run SQL queries, and manage database state safely without leaving the editor.
+* **GitHub MCP**: Used by the agent for seamless version control—automatically reviewing diffs, writing precise commit messages, and pushing code directly to the repository.
+* **Custom Rules & Skills**: The agent operated under a strict set of project-specific rules (`AGENTS.md`) tailored for FIR360 (e.g., *"Never remove officer confirmation flows," "Treat legal data safely"*). It utilized modular AI "Skills" (`fir360-architecture`, `fir360-testing`) to deeply understand our specific Next.js/Supabase architecture and maintain high engineering standards without over-engineering.
 
 ## 🛠️ Tech Stack + Architecture
 
