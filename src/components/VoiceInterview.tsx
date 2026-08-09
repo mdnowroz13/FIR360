@@ -212,7 +212,7 @@ function AgentInterface({ onSwitchToText, onFinalized }: { onSwitchToText: () =>
   // Transcription listener
   useEffect(() => {
     if (!room) return
-    const handleTranscription = (segments: TranscriptionSegment[], participant?: RemoteParticipant) => {
+    const handleTranscription = (segments: TranscriptionSegment[], participant?: any) => {
       setTranscripts(prev => {
         const next = [...prev]
         for (const segment of segments) {
