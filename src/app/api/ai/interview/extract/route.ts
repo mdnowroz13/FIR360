@@ -132,8 +132,7 @@ Return ONLY valid JSON. Do not include markdown blocks.`
       model: 'openrouter/free',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
-      timeout: 30000,
-    })
+    }, { timeout: 30000 })
 
     let responseText = result.choices[0]?.message?.content || '{}'
     

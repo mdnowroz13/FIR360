@@ -293,10 +293,11 @@ export default function InterviewCapture({ draftId }: { draftId: string }) {
               <Keyboard className="w-4 h-4" /> Text Mode
             </button>
             <button
-              onClick={() => !isVoiceMode && handleToggleMode()}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-widest transition-colors ${isVoiceMode ? 'bg-[var(--ink)] text-[var(--paper)]' : 'text-[var(--muted)] hover:text-[var(--ink)]'}`}
+              disabled={true}
+              // onClick={() => !isVoiceMode && handleToggleMode()}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-widest transition-colors opacity-50 cursor-not-allowed text-[var(--muted)]`}
             >
-              <Mic className="w-4 h-4" /> Voice Mode
+              <Mic className="w-4 h-4" /> Voice Mode (Coming Soon)
             </button>
           </div>
         </div>

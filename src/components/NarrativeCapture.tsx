@@ -151,14 +151,15 @@ export default function NarrativeCapture({ draftId, initialTranscript }: { draft
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
           <button
-            onClick={() => handleToggleMode('voice')}
-            className="flex flex-col items-center justify-center p-8 border-2 border-[var(--rule)] hover:border-[var(--ink)] bg-[var(--paper)] hover:bg-[var(--surface)] transition-all rounded-sm group gap-4"
+            disabled={true}
+            // onClick={() => handleToggleMode('voice')}
+            className="flex flex-col items-center justify-center p-8 border-2 border-[var(--rule)] bg-[var(--surface)] opacity-50 cursor-not-allowed transition-all rounded-sm group gap-4"
           >
-            <div className="h-16 w-16 rounded-full bg-[var(--surface)] group-hover:bg-[var(--ink)] flex items-center justify-center transition-colors">
-              <Mic className="h-8 w-8 text-[var(--ink)] group-hover:text-[var(--paper)]" />
+            <div className="h-16 w-16 rounded-full bg-[var(--surface)] flex items-center justify-center transition-colors">
+              <Mic className="h-8 w-8 text-[var(--muted)]" />
             </div>
             <div className="text-center">
-              <h3 className="font-mono font-bold text-lg text-[var(--ink)] uppercase tracking-wider mb-2">Voice Mode</h3>
+              <h3 className="font-mono font-bold text-lg text-[var(--muted)] uppercase tracking-wider mb-2">Voice Mode (Coming Soon)</h3>
               <p className="text-xs text-[var(--muted)] font-mono">Speak directly to the FIR Assistant.</p>
             </div>
           </button>
@@ -217,10 +218,11 @@ export default function NarrativeCapture({ draftId, initialTranscript }: { draft
               <Keyboard className="w-4 h-4" /> Text Mode
             </button>
             <button
-              onClick={() => mode === 'text' && handleToggleMode('voice')}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-widest transition-colors ${mode === 'voice' ? 'bg-[var(--ink)] text-[var(--paper)]' : 'text-[var(--muted)] hover:text-[var(--ink)]'}`}
+              disabled={true}
+              // onClick={() => mode === 'text' && handleToggleMode('voice')}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-widest transition-colors opacity-50 cursor-not-allowed text-[var(--muted)]`}
             >
-              <Mic className="w-4 h-4" /> Voice Mode
+              <Mic className="w-4 h-4" /> Voice Mode (Coming Soon)
             </button>
           </div>
         </div>

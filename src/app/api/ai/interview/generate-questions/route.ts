@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import OpenAI from 'openai'
+import { z } from 'zod'
+
+const NlgResponseSchema = z.object({
+  questions: z.array(z.object({
+    question: z.string(),
+    reason_for_asking: z.string().nullable().optional(),
+    field_key: z.string().nullable().optional()
+  })).optional().default([])
+}).passthrough()
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -195,8 +204,7 @@ Output JSON Schema:
       model: 'openrouter/free',
       messages: [{ role: 'user', content: nlgPrompt }],
       temperature: 0.2,
-      timeout: 30000,
-    })
+    }, { timeout: 30000 })
 
     let nlgText = result.choices[0]?.message?.content || '{}'
     
@@ -208,7 +216,14 @@ Output JSON Schema:
       throw new Error('No JSON object found in response')
     }
     
-    const rawQuestions = JSON.parse(nlgText).questions || []
+    const parsedData = JSON.parse(nlgText)
+    const parsed = NlgResponseSchema.safeParse(parsedData)
+    if (!parsed.success) {
+      console.error('AI Response Validation Failed in generate-questions:', parsed.error)
+      return NextResponse.json({ error: 'AI returned invalid questions format' }, { status: 422 })
+    }
+    
+    const rawQuestions = parsed.data.questions || []
 
     // We no longer need the SSP Self Review LLM call because the deterministic planner 
     // guarantees no duplicate field requests, saving 40% token usage and reducing latency.

@@ -2,6 +2,22 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { retrieveRelevantLegalReferences } from '@/lib/retriever'
 import OpenAI from 'openai'
+import { z } from 'zod'
+
+const SuggestResponseSchema = z.object({
+  incident_narrative: z.string().nullable().optional(),
+  incident_analysis: z.array(z.object({
+    event: z.string().nullable().optional(),
+    classification: z.string().nullable().optional(),
+    recommended_sections: z.array(z.string()).nullable().optional()
+  })).nullable().optional(),
+  sections: z.array(z.object({
+    code: z.string(),
+    title: z.string().nullable().optional(),
+    reason: z.string().nullable().optional(),
+    confidence: z.string().nullable().optional()
+  })).nullable().optional()
+}).passthrough()
 
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -83,8 +99,7 @@ Return ONLY valid JSON matching this schema exactly. Do not include markdown cod
       model: 'openrouter/free',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
-      timeout: 30000,
-    })
+    }, { timeout: 30000 })
 
     let responseText = result.choices[0]?.message?.content || '{}'
     
@@ -98,18 +113,25 @@ Return ONLY valid JSON matching this schema exactly. Do not include markdown cod
     
     const output = JSON.parse(responseText)
 
+    const parsed = SuggestResponseSchema.safeParse(output)
+    if (!parsed.success) {
+      console.error('AI Response Validation Failed in sections/suggest:', parsed.error)
+      return NextResponse.json({ error: 'AI returned invalid sections format' }, { status: 422 })
+    }
+    const validatedData = parsed.data
+
     // Atomic Database Update: Saving Narrative AND Sections in one call
     const { error } = await supabase
       .from('fir_drafts')
       .update({ 
-        incident_narrative: output.incident_narrative,
-        ai_suggested_sections: output.sections 
+        incident_narrative: validatedData.incident_narrative,
+        ai_suggested_sections: validatedData.sections 
       })
       .eq('id', draftId)
 
     if (error) throw new Error('Failed to save suggested sections')
 
-    return NextResponse.json({ success: true, sections: output.sections, incident_analysis: output.incident_analysis || [] })
+    return NextResponse.json({ success: true, sections: validatedData.sections || [], incident_analysis: validatedData.incident_analysis || [] })
 
   } catch (error: any) {
     console.error('Error suggesting sections:', error)
